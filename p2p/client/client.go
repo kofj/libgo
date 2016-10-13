@@ -1,7 +1,6 @@
 package client
 
 import (
-	"bufio"
 	"crypto/cipher"
 	"crypto/tls"
 	"encoding/json"
@@ -46,11 +45,12 @@ type P2pClient struct {
 	remoteConn      net.Conn
 
 	mode   string
+	err    error
 	aesKey *cipher.Block
 
-	Receive func(msg []byte)
-	Reply   func() (msg []byte)
-	Send    func(func(msg []byte) error)
+	ReceiveFunc func(msg []byte)
+	ReplyFunc   func() (msg []byte)
+	SendFunc    func(string, func(msg []byte) error)
 }
 
 func init() {
@@ -65,9 +65,9 @@ func New(s Setting) P2pClient {
 		g_ClientMapKey:  make(map[string]*cipher.Block),
 		g_Id2UDPSession: make(map[string]*UDPMakeSession),
 		setting:         &s,
-		Receive:         func(msg []byte) { println("Recv MSG from remote") },
-		Reply:           func() (msg []byte) { println("Reply MSG to remote"); return []byte("小尾巴～") },
-		Send:            func(func(msg []byte) error) { println("Send MSG to remote") },
+		ReceiveFunc:     func(msg []byte) { println("Recv MSG from remote") },
+		ReplyFunc:       func() (msg []byte) { println("Reply MSG to remote"); return []byte{} },
+		SendFunc:        func(string, func(msg []byte) error) { println("Send MSG to remote") },
 	}
 }
 
@@ -83,24 +83,28 @@ func (p *P2pClient) Link(id string) {
 	p.start()
 }
 
+func (p *P2pClient) GetError() error {
+	return p.err
+}
+
 func (p *P2pClient) start() {
 	//var err error
 	if p.setting.UseSSL {
 		_remoteConn, err := tls.Dial("tcp", p.setting.RemoteAddr, &tls.Config{InsecureSkipVerify: true})
 		if err != nil {
-			println("connect remote err:" + err.Error())
+			p.err = errors.New("connect remote err:" + err.Error())
 			return
 		}
 		p.remoteConn = net.Conn(_remoteConn)
 	} else {
 		_remoteConn, err := net.DialTimeout("tcp", p.setting.RemoteAddr, 10*time.Second)
 		if err != nil {
-			println("connect remote err:" + err.Error())
+			p.err = errors.New("connect remote err:" + err.Error())
 			return
 		}
 		p.remoteConn = _remoteConn
 	}
-	println("connect to server succeed")
+
 	go p.connect()
 	q := make(chan bool)
 	go func() {
@@ -150,9 +154,7 @@ func (p *P2pClient) connect() {
 	}
 
 	clientInfoStr, _ := json.Marshal(clientInfo)
-	log.Println("[init client]", string(clientInfoStr),
-		common.Write(p.remoteConn, "0", "init", string(clientInfoStr)),
-	)
+	p.err = common.Write(p.remoteConn, "0", "init", string(clientInfoStr))
 }
 
 func (p *P2pClient) disconnect() {
@@ -163,19 +165,22 @@ func (p *P2pClient) disconnect() {
 }
 
 func (p *P2pClient) handleResponse(conn net.Conn, clientId string, action string, content string) {
-	// log.Println("[client.handleResponse]got", clientId, action, content)
 	switch action {
 	case "show":
-		fmt.Println(time.Now().Format("2006-01-02 15:04:05"), content)
+		// fmt.Println(time.Now().Format("2006-01-02 15:04:05"), content)
+		p.err = errors.New(content)
 	case "showandretry":
-		fmt.Println(time.Now().Format("2006-01-02 15:04:05"), content)
+		// fmt.Println(time.Now().Format("2006-01-02 15:04:05"), content)
+		p.err = errors.New(content)
 		p.remoteConn.Close()
 	case "showandquit":
-		fmt.Println(time.Now().Format("2006-01-02 15:04:05"), content)
+		// fmt.Println(time.Now().Format("2006-01-02 15:04:05"), content)
+		p.err = errors.New(content)
 		p.remoteConn.Close()
 	case "clientquit":
 		client := p.g_ClientMap[clientId]
-		log.Println("clientquit!!!", clientId, client)
+		// log.Println("clientquit!!!", clientId, client)
+		p.err = errors.New(content)
 		if client != nil {
 			client.Quit()
 		}
@@ -264,14 +269,14 @@ func (p *P2pClient) handleResponse(conn net.Conn, clientId string, action string
 		clientId = arr[0]
 		_, bHave := p.g_ClientMap[clientId]
 		if bHave {
-			p.Receive([]byte(content))
+			p.ReceiveFunc([]byte(content))
 		}
 	case "csmode_msg_s":
 		arr := strings.Split(clientId, "-")
 		clientId = arr[0]
 		_, bHave := p.g_ClientMap[clientId]
 		if bHave {
-			p.Receive([]byte(content))
+			p.ReceiveFunc([]byte(content))
 		}
 	}
 
@@ -322,22 +327,15 @@ func (sc *Client) removeSession(sessionId string) bool {
 }
 
 func (sc *Client) OnTunnelRecv(pipe net.Conn, sessionId string, action string, content string) {
-	session := sc.getSession(sessionId)
-	var conn net.Conn
-	if session != nil {
-		conn = session.localConn
-	}
+
 	switch action {
 	case "tunnel_error":
-		if conn != nil {
-			conn.Write([]byte(content))
-			log.Println("tunnel error", content, sessionId)
-		}
+		log.Println("tunnel error", content, sessionId)
 		sc.removeSession(sessionId)
 		//case "serve_begin":
 	case "tunnel_msg_s":
 		// client recive
-		go sc.p2p.Receive([]byte(content))
+		go sc.p2p.ReceiveFunc([]byte(content))
 	case "tunnel_close_s":
 		sc.removeSession(sessionId)
 	case "ping", "pingback":
@@ -346,10 +344,8 @@ func (sc *Client) OnTunnelRecv(pipe net.Conn, sessionId string, action string, c
 			common.Write(pipe, sessionId, "pingback", "")
 		}
 	case "tunnel_msg_c":
-		if conn != nil {
-			//log.Println("tunnel", len(content), sessionId)
-			conn.Write([]byte(content))
-		}
+		go sc.p2p.ReceiveFunc([]byte(content))
+
 	case "tunnel_close":
 		sc.removeSession(sessionId)
 	case "tunnel_open":
@@ -397,13 +393,15 @@ func (sc *Client) ClientBegin() bool {
 		// common.Write(pipe, sessionId, "tunnel_close", "")
 		return
 	}
-	go sc.p2p.Send(write)
 
 	sc.p2p.mode = "p2p"
 	if !sc.bUdp {
 		sc.p2p.mode = "c/s"
 		delete(sc.p2p.g_ClientMapKey, sc.id)
 	}
+
+	go sc.p2p.SendFunc(sc.p2p.mode, write)
+	// println("link mode", sc.p2p.mode)
 
 	return true
 }
@@ -425,7 +423,6 @@ func (sc *Client) getOnePipe() net.Conn {
 }
 
 func (sc *Client) Run(index int, specPipe string) {
-	println("[Client][Run]index:", index)
 	var pipe net.Conn
 	if index >= 0 {
 		pipe = sc.pipes[index]
@@ -442,7 +439,6 @@ func (sc *Client) Run(index int, specPipe string) {
 			}
 		}
 		common.Read(pipe, callback)
-		println("client end read", index)
 		if index >= 0 {
 			delete(sc.pipes, index)
 			if sc.p2p.setting.clientType == "link" {
@@ -466,7 +462,7 @@ func (sc *Client) SetReadDeadline(t time.Time) error  { return nil }
 func (sc *Client) SetWriteDeadline(t time.Time) error { return nil }
 
 func handleLocalPortResponse(client *Client, id string) {
-	msg := client.p2p.Reply()
+	msg := client.p2p.ReplyFunc()
 	pipe := client.getOnePipe()
 	common.Write(pipe, id, "tunnel_msg_s", string(msg))
 	common.Write(pipe, id, "tunnel_close_s", "")

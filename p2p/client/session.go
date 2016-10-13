@@ -3,6 +3,7 @@ package client
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"errors"
 	"log"
 	"net"
 	"strconv"
@@ -158,7 +159,7 @@ func (session *UDPMakeSession) reportAddrList(buster bool, outip string) {
 	_id, _ := strconv.Atoi(id)
 	engine, err := nat.Init(outip, buster, _id, session.p2p.setting.BusterAddr)
 	if err != nil {
-		println("init error", err.Error())
+		session.p2p.err = errors.New("nat error:" + err.Error())
 		session.p2p.disconnect()
 		return
 	}
@@ -168,7 +169,6 @@ func (session *UDPMakeSession) reportAddrList(buster bool, outip string) {
 		engine.SetOtherAddrList(otherAddrList)
 	}
 	addrList := engine.GetAddrList()
-	println("[reportAddrList]addrList", addrList)
 	common.Write(session.p2p.remoteConn, id, "report_addrlist", addrList)
 }
 
