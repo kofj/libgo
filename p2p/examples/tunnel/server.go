@@ -10,12 +10,22 @@ import (
 var data []byte
 
 func main() {
-	p := client.New(client.DefaultSettings)
+	s := client.DefaultSettings
+	s.Verbose = true
+	s.RemoteAddr = "127.0.0.1:8000"
+	s.BusterAddr = "127.0.0.1:8018"
+
+	p := client.New(s)
 	p.ReceiveFunc = func(msg []byte) {
 		data = msg
 	}
 	p.ReplyFunc = replyFunc
 	p.Reg("test.88D1C424")
+	err := p.GetError()
+	if err != nil {
+		println(err.Error())
+	}
+	println("exit.")
 }
 
 func replyFunc() (msg []byte) {

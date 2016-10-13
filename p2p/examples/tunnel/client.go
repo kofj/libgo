@@ -42,6 +42,8 @@ func main() {
 	// connect to remote
 	s := client.DefaultSettings
 	// s.ClientMode = 2
+	s.RemoteAddr = "127.0.0.1:8000"
+	s.BusterAddr = "127.0.0.1:8018"
 	p := client.New(s)
 	p.ReceiveFunc = receiveFunc
 	p.SendFunc = sendFunc
