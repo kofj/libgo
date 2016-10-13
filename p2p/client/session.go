@@ -3,7 +3,6 @@ package client
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"fmt"
 	"log"
 	"net"
 	"strconv"
@@ -122,7 +121,7 @@ func (session *UDPMakeSession) beginMakeHole(content string) {
 			log.Println("[beginMakeHole] add common session", session.buster, session.sessionId, session.id)
 			if session.p2p.setting.clientType == "link" {
 				if len(client.pipes) == session.p2p.setting.PipeNum {
-					client.MultiListen()
+					client.ClientBegin()
 				}
 			}
 		} else {
@@ -182,87 +181,6 @@ type clientSession struct {
 	recvMsg   string
 	extra     uint8
 	setting   Setting
-}
-
-func (session *clientSession) processSockProxy(sc *Client, sessionId, content string, callback func()) {
-	pipe := session.pipe
-	session.recvMsg += content
-	bytes := []byte(session.recvMsg)
-	size := len(bytes)
-	// log.Println("recv msg-====", len(session.recvMsg), session.recvMsg, session.status, sessionId)
-	switch session.status {
-	case "init":
-		if session.localConn != nil {
-			session.localConn.Close()
-			session.localConn = nil
-		}
-		if size < 2 {
-			//println("wait init")
-			return
-		}
-		var _, nmethod uint8 = bytes[0], bytes[1]
-		//println("version", version, nmethod)
-		session.status = "version"
-		session.recvMsg = string(bytes[2:])
-		session.extra = nmethod
-	case "version":
-		if uint8(size) < session.extra {
-			//println("wait version")
-			return
-		}
-		var send = []uint8{5, 0}
-		go common.Write(pipe, sessionId, "tunnel_msg_s", string(send))
-		session.status = "hello"
-		session.recvMsg = string(bytes[session.extra:])
-		session.extra = 0
-		//log.Println("now", len(session.recvMsg))
-	case "hello":
-		var hello reqMsg
-		bOk, tail := hello.read(bytes)
-		if bOk {
-			go func() {
-				var ansmsg ansMsg
-				url := hello.url
-				var s_conn net.Conn
-				var err error
-				if DnsCacheNum > 0 && hello.atyp == 3 {
-					host := string(hello.dst_addr[1 : 1+hello.dst_addr[0]])
-					resChan := make(chan *dnsQueryRes)
-					checkDns <- &dnsQueryReq{c: resChan, host: host, port: int(hello.dst_port2), reqtype: hello.reqtype, url: url}
-					res := <-resChan
-					s_conn = res.conn
-					err = res.err
-					if res.ip != "" {
-						url = net.JoinHostPort(res.ip, fmt.Sprintf("%d", hello.dst_port2))
-					}
-				}
-				if s_conn == nil && err == nil {
-					s_conn, err = net.DialTimeout(hello.reqtype, url, 30*time.Second)
-				}
-				if err != nil {
-					log.Println("connect to local server fail:", err.Error())
-					ansmsg.gen(&hello, 4)
-					go common.Write(pipe, sessionId, "tunnel_msg_s", string(ansmsg.buf[:ansmsg.mlen]))
-					return
-				} else {
-					session.localConn = s_conn
-					go handleLocalPortResponse(sc, sessionId)
-					ansmsg.gen(&hello, 0)
-					go common.Write(pipe, sessionId, "tunnel_msg_s", string(ansmsg.buf[:ansmsg.mlen]))
-					session.status = "ok"
-					session.recvMsg = string(tail)
-					callback()
-					return
-				}
-			}()
-		} else {
-			//log.Println("wait hello")
-		}
-		return
-	case "ok":
-		return
-	}
-	session.processSockProxy(sc, sessionId, "", callback)
 }
 
 func isCommonSessionId(id string) bool {
