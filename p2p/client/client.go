@@ -474,10 +474,10 @@ var (
 		id:         "mac",
 		clientType: "reg",
 
-		BusterAddr: "10.200.1.100:16006",
-		RemoteAddr: "10.200.1.100:16005",
-		// BusterAddr: "188.166.248.38:8018",
-		// RemoteAddr: "188.166.248.38:8019",
+		// BusterAddr: "10.200.1.100:16006",
+		// RemoteAddr: "10.200.1.100:16005",
+		BusterAddr: "dog-tunnel.tk:8018",
+		RemoteAddr: "dog-tunnel.tk:8000",
 		PipeNum:    1,
 		ClientKey:  "p2p",
 		ClientMode: 0,
@@ -485,15 +485,6 @@ var (
 		Verbose:    true,
 		InitAddr:   "127.0.0.1",
 	}
-	// Settings = Setting{
-	// 	BusterAddr: "dog-tunnel.tk:8018",
-	// 	RemoteAddr: "dog-tunnel.tk:8000",
-	// 	PipeNum:    1,
-	// 	ClientKey:  "p2p",
-	// 	ClientMode: 0,
-	// 	UseSSL:     true,
-	// 	Verbose:    false,
-	// }
 )
 
 // version
