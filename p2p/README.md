@@ -38,7 +38,7 @@ func main() {
 
 ### Register a Service
 
-​	Full demo: [tunnel server](example/tunnel/server.go)
+​	Full demo: [tunnel server](p2p/examples/tunnel/server.go)
 
 ```go
 s := client.DefaultSettings
@@ -74,7 +74,7 @@ println("exit.")
 
 ### Link to the service.
 
-​	Full demo: [tunnel client](example/tunnel/client.go)
+​	Full demo: [tunnel client](p2p/examples/tunnel/client.go)
 
 ```go
 s := client.DefaultSettings
@@ -114,4 +114,8 @@ UseSSL     bool   // use ssl
 Verbose    bool   // verbose mode
 InitAddr   string // addip for bust,xx.xx.xx.xx;xx.xx.xx.xx;
 ```
+
+
+
+## Demo
 
