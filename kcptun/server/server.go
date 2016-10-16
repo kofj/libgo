@@ -169,7 +169,7 @@ func Start(config Config) {
 	log.Println("sockbuf:", config.SockBuf)
 	log.Println("keepalive:", config.KeepAlive)
 
-	if err := lis.SetDSCP(0); err != nil {
+	if err := lis.SetDSCP(config.DSCP); err != nil {
 		log.Println("SetDSCP:", err)
 	}
 	if err := lis.SetReadBuffer(config.SockBuf); err != nil {
